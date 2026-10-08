@@ -1,0 +1,537 @@
+---
+title: "LEEt 4 UCL Martin pilot"
+author: "Natasha"
+date: "2026-10-08"
+output: html_document
+---
+
+```{r}
+
+sub1_task1 <- read.csv("data_tarea1_Jorge.csv")
+sub1_task2<- read.csv("data_tarea2_Jorge.csv")
+sub2_task1 <- read.csv("data_task-a36m_(1).csv")
+sub2_task2 <- read.csv("data_task a36m (2).csv")
+data-task-biuv <- read.csv("C:/Users/nalonso/Desktop/LEET 4 UCL/Words_leet/Pilot/data-task-biuv.csv")
+data-task-hgcs <- read.csv("C:/Users/nalonso/Desktop/LEET 4 UCL/Words_leet/Pilot/data-task-hgcs (1).csv")
+data-task-hgcs <- read.csv("C:/Users/nalonso/Desktop/LEET 4 UCL/Words_leet/Pilot/data-task-hgcs (2).csv")
+data-task-jtno <- read.csv("C:/Users/nalonso/Desktop/LEET 4 UCL/Words_leet/Pilot/data-task-jtno.csv")
+
+
+```
+
+
+```{r}
+# -------------------------------------------------------------
+# A. ACCURACY (Precisión / Tasa de acierto)
+# -------------------------------------------------------------
+cat("\n1. PRECISIÓN (ACCURACY):\n")
+if (!is.na(col_corr)) {
+acc <- mean(as.numeric(df_respuestas[[col_corr]]), na.rm = TRUE) * 100
+cat(sprintf("   - Precisión Global: %.2f%%\n", acc))
+if (acc < 75) {
+cat("   [!] ATENCIÓN: Accuracy baja (<75%). Verificar posible inversión de teclas F/J.\n")
+} else {
+cat("   [OK] Rendimiento adecuado (>75%).\n")
+}
+} else {
+cat("   [i] No se encontró columna 'correct'.\n")
+}
+# -------------------------------------------------------------
+# B. TIEMPOS DE REACCIÓN (RT)
+# -------------------------------------------------------------
+cat("\n2. TIEMPOS DE REACCIÓN (ms):\n")
+if (!is.na(col_rt)) {
+rts <- as.numeric(df_respuestas[[col_rt]])
+rts_validos <- rts[!is.na(rts)]
+cat(sprintf("   - Media:   %.1f ms (SD: %.1f ms)\n", mean(rts_validos), sd(rts_validos)))
+cat(sprintf("   - Mediana: %.1f ms\n", median(rts_validos)))
+cat(sprintf("   - Rango:   [%.1f ms - %.1f ms]\n", min(rts_validos), max(rts_validos)))
+cat(sprintf("   - Respuestas anticipadas (< 250 ms): %d ensayos\n", sum(rts_validos < 250)))
+}
+# -------------------------------------------------------------
+# C. BALANCE DE RESPUESTAS (F vs J)
+# -------------------------------------------------------------
+cat("\n3. DISTRIBUCIÓN DE TECLAS PULSADAS:\n")
+print(table(toupper(df_respuestas[[col_resp]])))
+# -------------------------------------------------------------
+# D. DISTRIBUCIÓN DE CONDICIONES (Spreadsheet)
+# -------------------------------------------------------------
+cols_cond <- intersect(names(df_respuestas), c("trial_type", "condition", "target_format"))
+if (length(cols_cond) > 0) {
+cat("\n4. BALANCE DE CONDICIONES EXPERIMENTALES:\n")
+for (cc in cols_cond) {
+cat(paste0("   * Factor '", cc, "':\n"))
+print(table(df_respuestas[[cc]]))
+}
+}
+}
+# 4. Ejecución secuencial por tarea
+cat("\n>>> INICIANDO REVISIÓN: TAREA 1 (SAME - DIFFERENT) <<<\n")
+walk(archivos_tarea1, ~ ejecutar_sanity_check(.x, "Tarea 1 (Same-Different)"))
+cat("\n>>> INICIANDO REVISIÓN: TAREA 2 (QUANTITY - WORD MATCHING) <<<\n")
+walk(archivos_tarea2, ~ ejecutar_sanity_check(.x, "Tarea 2 (Quantity-Word Matching)"))
+# ==============================================================================
+# SANITY CHECKS EN R - EXPERIMENTO GORILLA (4 PILOTOS)
+# ==============================================================================
+if (!require("tidyverse")) install.packages("tidyverse")
+library(tidyverse)
+# 1. Definir la ruta de la carpeta (usando '/' para evitar errores en Windows)
+carpeta_datos <- "C:/Users/nalonso/Desktop/LEET 4 UCL"
+# Opcional: Establecerla como directorio de trabajo principal
+setwd(carpeta_datos)
+# 2. Rutas completas a cada archivo
+archivos_tarea1 <- file.path(carpeta_datos, c(
+"data-task-a36m (1).csv",
+"data_tarea1_Jorge.csv",
+"data-task-biuv.csv"
+))
+archivos_tarea2 <- file.path(carpeta_datos, c(
+"data-task-hgcs (1).csv",
+"data_tarea2_Jorge.csv",
+"data-task-jtno.csv"
+))
+# 3. Función general de Sanity Check
+ejecutar_sanity_check <- function(ruta_archivo, nombre_tarea) {
+cat("\n======================================================================\n")
+cat(paste0("TAREA: ", nombre_tarea, "\nARCHIVO: ", basename(ruta_archivo), "\n"))
+cat("======================================================================\n")
+if (!file.exists(ruta_archivo)) {
+cat(paste0("[ERROR] No se encuentra el archivo en la ruta especificada:\n", ruta_archivo, "\n"))
+return(NULL)
+}
+# Cargar datos
+df <- read_csv(ruta_archivo, show_col_types = FALSE)
+# Normalizar nombres de columnas a minúsculas
+names(df) <- tolower(gsub("[ ._]+", "_", names(df)))
+# Detectar columnas clave
+col_resp <- grep("^(response|respuesta)$", names(df), value = TRUE)[1]
+col_rt   <- grep("^(reaction_time|rt)$", names(df), value = TRUE)[1]
+col_corr <- grep("^(correct|acierto)$", names(df), value = TRUE)[1]
+if (is.na(col_resp)) {
+cat("[AVISO] Columna de respuesta no detectada. Columnas disponibles:\n")
+print(head(names(df), 12))
+return(NULL)
+}
+# Filtrar ensayos donde el participante respondió con F o J
+df_respuestas <- df %>%
+filter(!is.na(.data[[col_resp]])) %>%
+filter(toupper(.data[[col_resp]]) %in% c("F", "J"))
+total_ensayos <- nrow(df_respuestas)
+cat(paste0("-> Total de ensayos con respuesta (F/J): ", total_ensayos, "\n"))
+if (any(c("timed_out", "timeout") %in% names(df))) {
+col_to <- intersect(names(df), c("timed_out", "timeout"))[1]
+n_timeouts <- sum(df[[col_to]] == 1 | df[[col_to]] == TRUE, na.rm = TRUE)
+cat(paste0("-> Ensayos perdidos por Timeout: ", n_timeouts, "\n"))
+}
+if (total_ensayos == 0) {
+cat("[ALERTA] No se detectaron pulsaciones de F o J en este archivo.\n")
+return(NULL)
+}
+# A. Accuracy
+cat("\n1. PRECISIÓN (ACCURACY):\n")
+if (!is.na(col_corr)) {
+acc <- mean(as.numeric(df_respuestas[[col_corr]]), na.rm = TRUE) * 100
+cat(sprintf("   - Precisión Global: %.2f%%\n", acc))
+if (acc < 75) {
+cat("   [!] ATENCIÓN: Accuracy baja (<75%). Verificar si se invirtieron las teclas.\n")
+} else {
+cat("   [OK] Rendimiento adecuado (>75%).\n")
+}
+} else {
+cat("   [i] No se encontró columna 'correct'.\n")
+}
+# B. Tiempos de reacción (ms)
+cat("\n2. TIEMPOS DE REACCIÓN (ms):\n")
+if (!is.na(col_rt)) {
+rts <- as.numeric(df_respuestas[[col_rt]])
+rts_validos <- rts[!is.na(rts)]
+cat(sprintf("   - Media:   %.1f ms (SD: %.1f ms)\n", mean(rts_validos), sd(rts_validos)))
+cat(sprintf("   - Mediana: %.1f ms\n", median(rts_validos)))
+cat(sprintf("   - Rango:   [%.1f ms - %.1f ms]\n", min(rts_validos), max(rts_validos)))
+cat(sprintf("   - Respuestas anticipadas (< 250 ms): %d ensayos\n", sum(rts_validos < 250)))
+}
+# C. Balance de respuestas
+cat("\n3. DISTRIBUCIÓN DE TECLAS PULSADAS:\n")
+print(table(toupper(df_respuestas[[col_resp]])))
+# D. Balance de condiciones experimentales
+cols_cond <- intersect(names(df_respuestas), c("trial_type", "condition", "target_format"))
+if (length(cols_cond) > 0) {
+cat("\n4. BALANCE DE CONDICIONES EXPERIMENTALES:\n")
+for (cc in cols_cond) {
+cat(paste0("   * Factor '", cc, "':\n"))
+print(table(df_respuestas[[cc]]))
+}
+}
+}
+# 4. Ejecución secuencial
+cat("\n>>> INICIANDO REVISIÓN: TAREA 1 (SAME - DIFFERENT) <<<\n")
+walk(archivos_tarea1, ~ ejecutar_sanity_check(.x, "Tarea 1 (Same-Different)"))
+cat("\n>>> INICIANDO REVISIÓN: TAREA 2 (QUANTITY - WORD MATCHING) <<<\n")
+walk(archivos_tarea2, ~ ejecutar_sanity_check(.x, "Tarea 2 (Quantity-Word Matching)"))
+# ==============================================================================
+# PASO 1: DIAGNÓSTICO AUTOMÁTICO DE RUTA Y ARCHIVOS
+# ==============================================================================
+# 1. Comprobar si R ve la carpeta del Escritorio
+posibles_rutas <- c(
+"C:/Users/nalonso/Desktop/LEET 4 UCL",
+"C:/Users/nalonso/OneDrive/Desktop/LEET 4 UCL",
+"~/Desktop/LEET 4 UCL"
+)
+ruta_valida <- posibles_rutas[dir.exists(posibles_rutas)][1]
+if (is.na(ruta_valida)) {
+cat("No se encuentra la carpeta en las rutas estándar. Selecciona la carpeta manualmente en la ventana que se va a abrir:\n")
+ruta_valida <- choose.dir(caption = "Selecciona la carpeta LEET 4 UCL")
+}
+cat("-> Carpeta detectada con éxito:", ruta_valida, "\n\n")
+# Fijar como directorio de trabajo
+setwd(ruta_valida)
+# 2. Listar todos los archivos CSV reales que hay dentro de la carpeta
+archivos_reales <- list.files(pattern = "\\.csv$", ignore.case = TRUE)
+cat("-> Archivos CSV encontrados en la carpeta:\n")
+print(archivos_reales)
+knitr::opts_chunk$set(echo = TRUE)
+# ==============================================================================
+# PASO 2: EJECUCIÓN DE LOS SANITY CHECKS CON DETECCIÓN AUTOMÁTICA
+# ==============================================================================
+if (!require("tidyverse")) install.packages("tidyverse")
+library(tidyverse)
+# Clasificar los archivos automáticamente según su nombre
+archivos_tarea1 <- archivos_reales[grepl("tarea1|a36m|biuv", archivos_reales, ignore.case = TRUE)]
+archivos_tarea2 <- archivos_reales[grepl("tarea2|hgcs|jtno", archivos_reales, ignore.case = TRUE)]
+cat("\nArchivos asignados a Tarea 1 (Same-Different):\n")
+print(archivos_tarea1)
+cat("\nArchivos asignados a Tarea 2 (Quantity-Word Matching):\n")
+print(archivos_tarea2)
+# Función de comprobación
+ejecutar_sanity_check <- function(archivo, nombre_tarea) {
+cat("\n======================================================================\n")
+cat(paste0("TAREA: ", nombre_tarea, " | ARCHIVO: ", archivo, "\n"))
+cat("======================================================================\n")
+df <- read_csv(archivo, show_col_types = FALSE)
+names(df) <- tolower(gsub("[ ._]+", "_", names(df)))
+col_resp <- grep("^(response|respuesta)$", names(df), value = TRUE)[1]
+col_rt   <- grep("^(reaction_time|rt)$", names(df), value = TRUE)[1]
+col_corr <- grep("^(correct|acierto)$", names(df), value = TRUE)[1]
+if (is.na(col_resp)) {
+cat("[AVISO] No se detectó columna 'response'. Columnas iniciales:\n")
+print(head(names(df), 10))
+return(NULL)
+}
+df_respuestas <- df %>%
+filter(!is.na(.data[[col_resp]])) %>%
+filter(toupper(.data[[col_resp]]) %in% c("F", "J"))
+total_ensayos <- nrow(df_respuestas)
+cat(paste0("-> Ensayos registrados con respuesta (F/J): ", total_ensayos, "\n"))
+if (total_ensayos == 0) {
+cat("[ALERTA] No se detectaron pulsaciones de teclas válidas.\n")
+return(NULL)
+}
+# Precisión
+if (!is.na(col_corr)) {
+acc <- mean(as.numeric(df_respuestas[[col_corr]]), na.rm = TRUE) * 100
+cat(sprintf("1. ACCURACY GLOBAL: %.2f%%\n", acc))
+}
+# RTs
+if (!is.na(col_rt)) {
+rts <- as.numeric(df_respuestas[[col_rt]])
+rts_validos <- rts[!is.na(rts)]
+cat(sprintf("2. TIEMPOS DE REACCIÓN: Media = %.1f ms | Mediana = %.1f ms (Rango: %.1f - %.1f ms)\n",
+mean(rts_validos), median(rts_validos), min(rts_validos), max(rts_validos)))
+}
+# Distribución teclas
+cat("3. REPARTO DE RESPUESTAS:\n")
+print(table(toupper(df_respuestas[[col_resp]])))
+# Condiciones experimentales
+cols_cond <- intersect(names(df_respuestas), c("trial_type", "condition", "target_format"))
+if (length(cols_cond) > 0) {
+cat("4. BALANCE DE CONDICIONES:\n")
+for (cc in cols_cond) {
+cat(paste0("   * Factor '", cc, "':\n"))
+print(table(df_respuestas[[cc]]))
+}
+}
+}
+# Ejecutar
+if (length(archivos_tarea1) > 0) {
+cat("\n>>> PROCESANDO TAREA 1 <<<\n")
+walk(archivos_tarea1, ~ ejecutar_sanity_check(.x, "Tarea 1 (Same-Different)"))
+}
+if (length(archivos_tarea2) > 0) {
+cat("\n>>> PROCESANDO TAREA 2 <<<\n")
+walk(archivos_tarea2, ~ ejecutar_sanity_check(.x, "Tarea 2 (Quantity-Word Matching)"))
+}
+# ==============================================================================
+# PASO 1: DIAGNÓSTICO AUTOMÁTICO DE RUTA Y ARCHIVOS
+# ==============================================================================
+# 1. Comprobar si R ve la carpeta del Escritorio
+posibles_rutas <- c(
+"C:/Users/nalonso/Desktop/LEET 4 UCL",
+"C:/Users/nalonso/OneDrive/Desktop/LEET 4 UCL",
+"~/Desktop/LEET 4 UCL"
+)
+ruta_valida <- posibles_rutas[dir.exists(posibles_rutas)][1]
+if (is.na(ruta_valida)) {
+cat("No se encuentra la carpeta en las rutas estándar. Selecciona la carpeta manualmente en la ventana que se va a abrir:\n")
+ruta_valida <- choose.dir(caption = "Selecciona la carpeta LEET 4 UCL")
+}
+cat("-> Carpeta detectada con éxito:", ruta_valida, "\n\n")
+# Fijar como directorio de trabajo
+setwd(ruta_valida)
+# 2. Listar todos los archivos CSV reales que hay dentro de la carpeta
+archivos_reales <- list.files(pattern = "\\.csv$", ignore.case = TRUE)
+cat("-> Archivos CSV encontrados en la carpeta:\n")
+print(archivos_reales)
+# ==============================================================================
+# PASO 2: EJECUCIÓN DE LOS SANITY CHECKS CON DETECCIÓN AUTOMÁTICA
+# ==============================================================================
+if (!require("tidyverse")) install.packages("tidyverse")
+library(tidyverse)
+# Clasificar los archivos automáticamente según su nombre
+archivos_tarea1 <- archivos_reales[grepl("tarea1|a36m|biuv", archivos_reales, ignore.case = TRUE)]
+archivos_tarea2 <- archivos_reales[grepl("tarea2|hgcs|jtno", archivos_reales, ignore.case = TRUE)]
+cat("\nArchivos asignados a Tarea 1 (Same-Different):\n")
+print(archivos_tarea1)
+cat("\nArchivos asignados a Tarea 2 (Quantity-Word Matching):\n")
+print(archivos_tarea2)
+# Función de comprobación
+ejecutar_sanity_check <- function(archivo, nombre_tarea) {
+cat("\n======================================================================\n")
+cat(paste0("TAREA: ", nombre_tarea, " | ARCHIVO: ", archivo, "\n"))
+cat("======================================================================\n")
+df <- read_csv(archivo, show_col_types = FALSE)
+names(df) <- tolower(gsub("[ ._]+", "_", names(df)))
+col_resp <- grep("^(response|respuesta)$", names(df), value = TRUE)[1]
+col_rt   <- grep("^(reaction_time|rt)$", names(df), value = TRUE)[1]
+col_corr <- grep("^(correct|acierto)$", names(df), value = TRUE)[1]
+if (is.na(col_resp)) {
+cat("[AVISO] No se detectó columna 'response'. Columnas iniciales:\n")
+print(head(names(df), 10))
+return(NULL)
+}
+df_respuestas <- df %>%
+filter(!is.na(.data[[col_resp]])) %>%
+filter(toupper(.data[[col_resp]]) %in% c("F", "J"))
+total_ensayos <- nrow(df_respuestas)
+cat(paste0("-> Ensayos registrados con respuesta (F/J): ", total_ensayos, "\n"))
+if (total_ensayos == 0) {
+cat("[ALERTA] No se detectaron pulsaciones de teclas válidas.\n")
+return(NULL)
+}
+# Precisión
+if (!is.na(col_corr)) {
+acc <- mean(as.numeric(df_respuestas[[col_corr]]), na.rm = TRUE) * 100
+cat(sprintf("1. ACCURACY GLOBAL: %.2f%%\n", acc))
+}
+# RTs
+if (!is.na(col_rt)) {
+rts <- as.numeric(df_respuestas[[col_rt]])
+rts_validos <- rts[!is.na(rts)]
+cat(sprintf("2. TIEMPOS DE REACCIÓN: Media = %.1f ms | Mediana = %.1f ms (Rango: %.1f - %.1f ms)\n",
+mean(rts_validos), median(rts_validos), min(rts_validos), max(rts_validos)))
+}
+# Distribución teclas
+cat("3. REPARTO DE RESPUESTAS:\n")
+print(table(toupper(df_respuestas[[col_resp]])))
+# Condiciones experimentales
+cols_cond <- intersect(names(df_respuestas), c("trial_type", "condition", "target_format"))
+if (length(cols_cond) > 0) {
+cat("4. BALANCE DE CONDICIONES:\n")
+for (cc in cols_cond) {
+cat(paste0("   * Factor '", cc, "':\n"))
+print(table(df_respuestas[[cc]]))
+}
+}
+}
+# Ejecutar
+if (length(archivos_tarea1) > 0) {
+cat("\n>>> PROCESANDO TAREA 1 <<<\n")
+walk(archivos_tarea1, ~ ejecutar_sanity_check(.x, "Tarea 1 (Same-Different)"))
+}
+if (length(archivos_tarea2) > 0) {
+cat("\n>>> PROCESANDO TAREA 2 <<<\n")
+walk(archivos_tarea2, ~ ejecutar_sanity_check(.x, "Tarea 2 (Quantity-Word Matching)"))
+}
+# ==============================================================================
+# PASO 1: DIAGNÓSTICO AUTOMÁTICO DE RUTA Y ARCHIVOS
+# ==============================================================================
+# 1. Comprobar si R ve la carpeta del Escritorio
+posibles_rutas <- c(
+"C:/Users/nalonso/Desktop/LEET 4 UCL",
+"C:/Users/nalonso/OneDrive/Desktop/LEET 4 UCL",
+"~/Desktop/LEET 4 UCL"
+)
+ruta_valida <- posibles_rutas[dir.exists(posibles_rutas)][1]
+if (is.na(ruta_valida)) {
+cat("No se encuentra la carpeta en las rutas estándar. Selecciona la carpeta manualmente en la ventana que se va a abrir:\n")
+ruta_valida <- choose.dir(caption = "Selecciona la carpeta LEET 4 UCL")
+}
+cat("-> Carpeta detectada con éxito:", ruta_valida, "\n\n")
+# Fijar como directorio de trabajo
+setwd(ruta_valida)
+# 2. Listar todos los archivos CSV reales que hay dentro de la carpeta
+archivos_reales <- list.files(pattern = "\\.csv$", ignore.case = TRUE)
+cat("-> Archivos CSV encontrados en la carpeta:\n")
+print(archivos_reales)
+# ==============================================================================
+# PASO 2: EJECUCIÓN DE LOS SANITY CHECKS CON DETECCIÓN AUTOMÁTICA
+# ==============================================================================
+if (!require("tidyverse")) install.packages("tidyverse")
+library(tidyverse)
+# Clasificar los archivos automáticamente según su nombre
+archivos_tarea1 <- archivos_reales[grepl("tarea1|a36m|biuv", archivos_reales, ignore.case = TRUE)]
+archivos_tarea2 <- archivos_reales[grepl("tarea2|hgcs|jtno", archivos_reales, ignore.case = TRUE)]
+cat("\nArchivos asignados a Tarea 1 (Same-Different):\n")
+print(archivos_tarea1)
+cat("\nArchivos asignados a Tarea 2 (Quantity-Word Matching):\n")
+print(archivos_tarea2)
+# Función de comprobación
+ejecutar_sanity_check <- function(archivo, nombre_tarea) {
+cat("\n======================================================================\n")
+cat(paste0("TAREA: ", nombre_tarea, " | ARCHIVO: ", archivo, "\n"))
+cat("======================================================================\n")
+df <- read_csv(archivo, show_col_types = FALSE)
+names(df) <- tolower(gsub("[ ._]+", "_", names(df)))
+col_resp <- grep("^(response|respuesta)$", names(df), value = TRUE)[1]
+col_rt   <- grep("^(reaction_time|rt)$", names(df), value = TRUE)[1]
+col_corr <- grep("^(correct|acierto)$", names(df), value = TRUE)[1]
+if (is.na(col_resp)) {
+cat("[AVISO] No se detectó columna 'response'. Columnas iniciales:\n")
+print(head(names(df), 10))
+return(NULL)
+}
+df_respuestas <- df %>%
+filter(!is.na(.data[[col_resp]])) %>%
+filter(toupper(.data[[col_resp]]) %in% c("F", "J"))
+total_ensayos <- nrow(df_respuestas)
+cat(paste0("-> Ensayos registrados con respuesta (F/J): ", total_ensayos, "\n"))
+if (total_ensayos == 0) {
+cat("[ALERTA] No se detectaron pulsaciones de teclas válidas.\n")
+return(NULL)
+}
+# Precisión
+if (!is.na(col_corr)) {
+acc <- mean(as.numeric(df_respuestas[[col_corr]]), na.rm = TRUE) * 100
+cat(sprintf("1. ACCURACY GLOBAL: %.2f%%\n", acc))
+}
+# RTs
+if (!is.na(col_rt)) {
+rts <- as.numeric(df_respuestas[[col_rt]])
+rts_validos <- rts[!is.na(rts)]
+cat(sprintf("2. TIEMPOS DE REACCIÓN: Media = %.1f ms | Mediana = %.1f ms (Rango: %.1f - %.1f ms)\n",
+mean(rts_validos), median(rts_validos), min(rts_validos), max(rts_validos)))
+}
+# Distribución teclas
+cat("3. REPARTO DE RESPUESTAS:\n")
+print(table(toupper(df_respuestas[[col_resp]])))
+# Condiciones experimentales
+cols_cond <- intersect(names(df_respuestas), c("trial_type", "condition", "target_format"))
+if (length(cols_cond) > 0) {
+cat("4. BALANCE DE CONDICIONES:\n")
+for (cc in cols_cond) {
+cat(paste0("   * Factor '", cc, "':\n"))
+print(table(df_respuestas[[cc]]))
+}
+}
+}
+# Ejecutar
+if (length(archivos_tarea1) > 0) {
+cat("\n>>> PROCESANDO TAREA 1 <<<\n")
+walk(archivos_tarea1, ~ ejecutar_sanity_check(.x, "Tarea 1 (Same-Different)"))
+}
+if (length(archivos_tarea2) > 0) {
+cat("\n>>> PROCESANDO TAREA 2 <<<\n")
+walk(archivos_tarea2, ~ ejecutar_sanity_check(.x, "Tarea 2 (Quantity-Word Matching)"))
+}
+# ==============================================================================
+# SANITY CHECKS EN R - EXPERIMENTO GORILLA (PILOTOS)
+# ==============================================================================
+if (!require("tidyverse")) install.packages("tidyverse")
+library(tidyverse)
+# 1. Fijar la ruta exacta de la subcarpeta Pilotos
+carpeta_pilotos <- "C:/Users/nalonso/Desktop/LEET 4 UCL/Pilotos"
+# Establecer como directorio de trabajo
+setwd(carpeta_pilotos)
+cat("Directorio de trabajo activo:", getwd(), "\n\n")
+# 2. Rutas a los archivos
+archivos_tarea1 <- file.path(carpeta_pilotos, c(
+"data-task-a36m (1).csv",
+"data_tarea1_Jorge.csv",
+"data-task-biuv.csv"
+))
+archivos_tarea2 <- file.path(carpeta_pilotos, c(
+"data-task-hgcs (1).csv",
+"data_tarea2_Jorge.csv",
+"data-task-jtno.csv"
+))
+# 3. Función de comprobación
+ejecutar_sanity_check <- function(ruta_archivo, nombre_tarea) {
+cat("\n======================================================================\n")
+cat(paste0("TAREA: ", nombre_tarea, "\nARCHIVO: ", basename(ruta_archivo), "\n"))
+cat("======================================================================\n")
+if (!file.exists(ruta_archivo)) {
+cat(paste0("[ERROR] Sigue sin encontrarse el archivo: ", ruta_archivo, "\n"))
+return(NULL)
+}
+df <- read_csv(ruta_archivo, show_col_types = FALSE)
+names(df) <- tolower(gsub("[ ._]+", "_", names(df)))
+col_resp <- grep("^(response|respuesta)$", names(df), value = TRUE)[1]
+col_rt   <- grep("^(reaction_time|rt)$", names(df), value = TRUE)[1]
+col_corr <- grep("^(correct|acierto)$", names(df), value = TRUE)[1]
+if (is.na(col_resp)) {
+cat("[AVISO] Columna de respuesta no detectada. Columnas encontradas:\n")
+print(head(names(df), 10))
+return(NULL)
+}
+# Filtrar respuestas del participante (teclas F o J)
+df_respuestas <- df %>%
+filter(!is.na(.data[[col_resp]])) %>%
+filter(toupper(.data[[col_resp]]) %in% c("F", "J"))
+total_ensayos <- nrow(df_respuestas)
+cat(paste0("-> Ensayos registrados con respuesta (F/J): ", total_ensayos, "\n"))
+# Timeouts
+if (any(c("timed_out", "timeout") %in% names(df))) {
+col_to <- intersect(names(df), c("timed_out", "timeout"))[1]
+n_timeouts <- sum(df[[col_to]] == 1 | df[[col_to]] == TRUE, na.rm = TRUE)
+cat(paste0("-> Ensayos perdidos por Timeout: ", n_timeouts, "\n"))
+}
+# A. Accuracy
+cat("\n1. PRECISIÓN (ACCURACY):\n")
+if (!is.na(col_corr)) {
+acc <- mean(as.numeric(df_respuestas[[col_corr]]), na.rm = TRUE) * 100
+cat(sprintf("   - Precisión Global: %.2f%%\n", acc))
+if (acc < 75) {
+cat("   [!] ATENCIÓN: Accuracy baja (<75%). Comprobar si se invirtieron F/J.\n")
+} else {
+cat("   [OK] Precisión normal (>75%).\n")
+}
+}
+# B. Tiempos de reacción
+cat("\n2. TIEMPOS DE REACCIÓN (ms):\n")
+if (!is.na(col_rt)) {
+rts <- as.numeric(df_respuestas[[col_rt]])
+rts_validos <- rts[!is.na(rts)]
+cat(sprintf("   - Media: %.1f ms | Mediana: %.1f ms | SD: %.1f ms\n",
+mean(rts_validos), median(rts_validos), sd(rts_validos)))
+cat(sprintf("   - Rango: [%.1f ms - %.1f ms] | Anticipaciones (<250 ms): %d\n",
+min(rts_validos), max(rts_validos), sum(rts_validos < 250)))
+}
+# C. Distribución F vs J
+cat("\n3. DISTRIBUCIÓN DE TECLAS:\n")
+print(table(toupper(df_respuestas[[col_resp]])))
+# D. Condiciones experimentales
+cols_cond <- intersect(names(df_respuestas), c("trial_type", "condition", "target_format"))
+if (length(cols_cond) > 0) {
+cat("\n4. BALANCE DE CONDICIONES:\n")
+for (cc in cols_cond) {
+cat(paste0("   * Factor '", cc, "':\n"))
+print(table(df_respuestas[[cc]]))
+}
+}
+}
+# 4. Ejecución
+cat("\n>>> REVISIÓN TAREA 1: SAME - DIFFERENT <<<\n")
+walk(archivos_tarea1, ~ ejecutar_sanity_check(.x, "Tarea 1 (Same-Different)"))
+cat("\n>>> REVISIÓN TAREA 2: QUANTITY - WORD MATCHING <<<\n")
+walk(archivos_tarea2, ~ ejecutar_sanity_check(.x, "Tarea 2 (Quantity-Word Matching)"))
+
+```
