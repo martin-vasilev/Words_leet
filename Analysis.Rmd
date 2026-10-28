@@ -1,0 +1,203 @@
+---
+title: "Reunión 27/10"
+author: "Natasha"
+date: "2026-10-27"
+output: html_document
+---
+
+```{r}
+# 1. Cargar librerías necesarias
+library(tidyverse)
+#install.packages("psych")
+library(psych)
+
+# 2. Cargar el dataset crudo
+df_raw <- read_csv("data_exp_287108-v3_tasks.csv")
+
+# 3. Filtrar únicamente los ensayos de interés (trial y trial2)
+# Esto descarta descansos, pantallas de inicio, pausas y pantallas finales
+df_trials <- df_raw %>%
+  filter(Display %in% c("trial", "trial2"))
+
+# Verificación de conteo por ensayo tras el filtrado
+table(df_trials$Display, useNA = "ifany")
+
+# -------------------------------------------------------------------------
+# TABLAS DESCRIPTIVAS SIN LIMPIEZA 
+# -------------------------------------------------------------------------
+
+# 4. Tabla descriptiva con psych (N, Media, SD, Mediana, IQR, Min, Max, Skew, Kurtosis)
+descriptivos_rt <- describeBy(df_trials$`Reaction Time`, 
+                              group = df_trials$Display, 
+                              mat = TRUE, 
+                              digits = 2)
+print(descriptivos_rt)
+
+# 5. Tabla resumen personalizada con dplyr
+tabla_resumen <- df_trials %>%
+  group_by(Display) %>%
+  summarise(
+    N_Total = n(),
+    Perdidos_RT = sum(is.na(`Reaction Time`)),
+    Media_RT = mean(`Reaction Time`, na.rm = TRUE),
+    Mediana_RT = median(`Reaction Time`, na.rm = TRUE),
+    DT_RT = sd(`Reaction Time`, na.rm = TRUE),
+    IQR_RT = IQR(`Reaction Time`, na.rm = TRUE),
+    Min_RT = min(`Reaction Time`, na.rm = TRUE),
+    Max_RT = max(`Reaction Time`, na.rm = TRUE),
+    Tasa_Aciertos_Pct = mean(Correct, na.rm = TRUE) * 100
+  )
+print(tabla_resumen)
+
+# -------------------------------------------------------------------------
+# GRÁFICOS EXPLORATORIOS
+# -------------------------------------------------------------------------
+
+# A) Histogramas separados por facetas (Trial vs Trial2)
+ggplot(df_trials %>% filter(!is.na(`Reaction Time`)), 
+       aes(x = `Reaction Time`, fill = Display)) +
+  geom_histogram(binwidth = 50, color = "black", alpha = 0.7) + 
+  facet_wrap(~ Display, scales = "free_y") +
+  coord_cartesian(xlim = c(200, 2000)) + 
+  labs(title = "Distribución de Reaction Time por Ensayo (Zoom 200 - 2000 ms)",
+       x = "Reaction Time (ms)", 
+       y = "Frecuencia") +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+
+# B) Curva de densidad comparativa superpuesta
+ggplot(df_trials %>% filter(!is.na(`Reaction Time`)), 
+       aes(x = `Reaction Time`, color = Display, fill = Display)) +
+  geom_density(alpha = 0.3) +
+  coord_cartesian(xlim = c(0, 2000)) +
+  labs(title = "Curva de densidad comparativa de Tiempos de Reacción (0 - 2000 ms)",
+       x = "Reaction Time (ms)", 
+       y = "Densidad",
+       color = "Condición",
+       fill = "Condición") +
+  theme_minimal()
+
+# C) Diagrama de caja (Boxplot) para inspeccionar asimetría y dispersión
+ggplot(df_trials %>% filter(!is.na(`Reaction Time`)), 
+       aes(x = Display, y = `Reaction Time`, fill = Display)) +
+  geom_boxplot(alpha = 0.7, outlier.colour = "red", outlier.shape = 16) +
+  labs(title = "Boxplot de Reaction Time (Trial vs Trial2)",
+       x = "Ensayo", 
+       y = "Reaction Time (ms)") +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+# D) Proporción de Precisión (Aciertos vs. Errores)
+ggplot(df_trials %>% filter(!is.na(Correct)), 
+       aes(x = Display, fill = factor(Correct))) +
+  geom_bar(position = "fill") +
+  scale_y_continuous(labels = scales::percent) +
+  scale_fill_manual(values = c("0" = "#D95F02", "1" = "#1B9E77"), 
+                    labels = c("Error (0)", "Acierto (1)")) +
+  labs(title = "Proporción de Aciertos y Errores por Ensayo",
+       x = "Ensayo", 
+       y = "Porcentaje", 
+       fill = "Precisión") +
+  theme_minimal()
+```
+
+
+
+```{r}
+
+
+
+```
+
+
+
+```{r}
+
+
+
+```
+
+```{r}
+
+
+
+```
+
+```{r}
+
+
+
+```
+
+```{r}
+
+
+
+```
+
+```{r}
+
+
+
+```
+
+```{r}
+
+
+
+```
+
+```{r}
+
+
+
+```
+
+```{r}
+
+
+
+```
+
+```{r}
+
+
+
+```
+
+```{r}
+
+
+
+```
+
+```{r}
+
+
+
+```
+
+```{r}
+
+
+
+```
+
+```{r}
+
+
+
+```
+
+```{r}
+
+
+
+```
+
+```{r}
+
+
+
+```
