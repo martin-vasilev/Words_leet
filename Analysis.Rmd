@@ -194,7 +194,7 @@ print(tabla_resumen_acc)
 # GRÁFICOS EXPLORATORIOS POST-LIMPIEZA (CON ERROR BARS)
 # -------------------------------------------------------------------------
 
-# A) Gráfico de barras de RT Medio con Error Bars (± 1 SE)
+# A.2) Gráfico de barras de RT Medio con Error Bars (± 1 SE)
 ggplot(tabla_resumen_rt, aes(x = Display, y = Media_RT, fill = Display)) +
   geom_col(width = 0.45, alpha = 0.85, color = "black") +
   geom_errorbar(aes(ymin = Media_RT - SE_RT, ymax = Media_RT + SE_RT), 
@@ -205,6 +205,21 @@ ggplot(tabla_resumen_rt, aes(x = Display, y = Media_RT, fill = Display)) +
        subtitle = "Limpieza ±2.5 SD y 250-2000 ms por sujeto. Barras: ± 1 SE",
        x = "written formats", 
        y = "Reaction Time Medio (ms)") +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+# A) Histogramas separados por facetas (Trial vs Trial2) - LIMPIO
+ggplot(df_rt_clean, aes(x = `Reaction Time`, fill = Display)) +
+  geom_histogram(binwidth = 50, 
+                 boundary = 250, 
+                 color = "black", 
+                 alpha = 0.7) + 
+  facet_wrap(~ Display, scales = "free_y") +
+  coord_cartesian(xlim = c(250, 2000)) + 
+  scale_x_continuous(breaks = seq(250, 2000, by = 250)) +
+  labs(title = "Distribución de Reaction Time por Ensayo (Datos Limpios)",
+       x = "Reaction Time (ms)", 
+       y = "Frecuencia") +
   theme_minimal() +
   theme(legend.position = "none")
 
@@ -220,7 +235,23 @@ ggplot(tabla_resumen_rt, aes(x = Display, y = Media_RT, group = 1)) +
        color = "written formats") +
   theme_minimal()
 
-# C) Gráfico de barras de ACCURACY con Error Bars (± 1 SE) y etiquetas
+# C) Diagrama de caja (Boxplot) para inspeccionar asimetría y dispersión - DATOS LIMPIOS
+ggplot(df_rt_clean, aes(x = Display, y = `Reaction Time`, fill = Display)) +
+  geom_boxplot(alpha = 0.7, 
+               outlier.colour = "red", 
+               outlier.shape = 16, 
+               outlier.size = 1,
+               outlier.alpha = 0.3) +
+  coord_cartesian(ylim = c(250, 2000)) +
+  scale_y_continuous(breaks = seq(250, 2000, by = 250)) +
+  labs(title = "Boxplot de Reaction Time Depurados (Trial vs Trial2)",
+       subtitle = "Solo aciertos, 250 - 2000 ms y filtrado ±2.5 SD por sujeto",
+       x = "ensayo", 
+       y = "Reaction Time (ms)") +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+# C.2) Gráfico de barras de ACCURACY con Error Bars (± 1 SE) y etiquetas
 ggplot(tabla_resumen_acc, aes(x = Display, y = Accuracy_Pct, fill = Display)) +
   geom_col(width = 0.45, alpha = 0.85, color = "black") +
   geom_errorbar(aes(ymin = Accuracy_Pct - SE_Acc, ymax = Accuracy_Pct + SE_Acc), 
@@ -252,50 +283,7 @@ ggplot(df_rt_clean, aes(x = `Reaction Time`, color = Display, fill = Display)) +
 
 
 ```{r}
-# -------------------------------------------------------------------------
-# CUANTIFICACIÓN DETALLADA DE ENSAYOS ELIMINADOS
-# -------------------------------------------------------------------------
 
-# 1. Conteo total inicial (70 participantes)
-total_inicial <- nrow(df_trials)
-
-# 2. Ensayos eliminados para la base de ACCURACY (250-2000 ms y ±2.5 SD por sujeto)
-eliminados_acc <- total_inicial - nrow(df_accuracy_clean)
-pct_eliminados_acc <- (eliminados_acc / total_inicial) * 100
-
-# 3. Ensayos eliminados adicionales para REACTION TIME (los errores)
-errores_eliminados <- sum(df_accuracy_clean$Correct == 0, na.rm = TRUE)
-total_eliminados_rt <- total_inicial - nrow(df_rt_clean)
-pct_eliminados_rt <- (total_eliminados_rt / total_inicial) * 100
-
-# 4. Tabla resumen de descartes por Ensayo (written formats)
-tabla_descartes <- df_trials %>%
-  group_by(Display) %>%
-  summarise(
-    Total_Inicial = n(),
-    Fuera_Rango_250_2000ms = sum(`Reaction Time` < 250 | `Reaction Time` > 2000 | is.na(`Reaction Time`)),
-    # Cuántos se eliminan en Accuracy (Filtro fijo + SD)
-    Eliminados_en_Accuracy = n() - sum(`Participant Private ID` %in% df_accuracy_clean$`Participant Private ID` & 
-                                        row_number() %in% which(df_trials$Display == first(Display))), # o mediante anti_join
-    Retenidos_Accuracy = sum(df_accuracy_clean$Display == first(Display)),
-    Retenidos_RT_Aciertos = sum(df_rt_clean$Display == first(Display))
-  )
-
-# Resumen general por consola
-cat("=====================================================\n")
-cat("BALANCE DE PÉRDIDAS EN LA LIMPIEZA\n")
-cat("=====================================================\n")
-cat("Total de ensayos iniciales (N=70):", total_inicial, "\n\n")
-
-cat("--- PARA ACCURACY (conservando errores) ---\n")
-cat("Ensayos eliminados:", eliminados_acc, sprintf("(%.2f%% del total)\n", pct_eliminados_acc))
-cat("Ensayos conservados:", nrow(df_accuracy_clean), sprintf("(%.2f%% del total)\n\n", 100 - pct_eliminados_acc))
-
-cat("--- PARA REACTION TIME (solo aciertos) ---\n")
-cat("Ensayos con error excluidos:", errores_eliminados, "\n")
-cat("Total ensayos eliminados para RT:", total_eliminados_rt, sprintf("(%.2f%% del total)\n", pct_eliminados_rt))
-cat("Ensayos conservados para RT:", nrow(df_rt_clean), sprintf("(%.2f%% del total)\n", 100 - pct_eliminados_rt))
-cat("=====================================================\n")
 
 
 ```
