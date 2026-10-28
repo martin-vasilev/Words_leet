@@ -5,6 +5,140 @@ date: "2026-10-27"
 output: html_document
 ---
 
+
+
+
+# Data cleaning:
+
+```{r}
+# -------------------------------------------------------------------------
+# 1. CARGA DE LIBRERÍAS
+# -------------------------------------------------------------------------
+library(tidyverse)
+library(psych)
+library(kableExtra)
+library(lmerTest)
+library(ggeffects)
+
+# -------------------------------------------------------------------------
+# 2. CARGA DE DATOS Y EXCLUSIÓN DE PILOTOS (N = 70)
+# -------------------------------------------------------------------------
+df_raw <- read_csv("data_exp_287108-v3_tasks.zip")
+
+pilotos_reales <- c("skjj4nq6", "4deki73q", "q384vtnn", "nlduzyhx")
+
+datos_70_limpio <- df_raw %>%
+  filter(!is.na(`Participant Private ID`)) %>%
+  filter(!`Participant Public ID` %in% pilotos_reales)
+
+cat("Participantes únicos incluidos:", n_distinct(datos_70_limpio$`Participant Private ID`), "(Esperado: 70)\n\n")
+
+df_accuracy_clean <- df_respuestas %>%
+  #filter(!is.na(`Reaction Time`)) %>%
+  filter(`Reaction Time` >= 250 & `Reaction Time` <= 2000) %>%
+  group_by(`Participant Private ID`) %>%
+  mutate(
+    media_suj = mean(`Reaction Time`, na.rm = TRUE),
+    sd_suj = sd(`Reaction Time`, na.rm = TRUE),
+    lim_inf = media_suj - 2.5 * sd_suj,
+    lim_sup = media_suj + 2.5 * sd_suj,
+    es_outlier = `Reaction Time` <= lim_inf | `Reaction Time` >= lim_sup
+  ) %>%
+  filter(!es_outlier) %>%
+  ungroup()
+
+# B) Dataset para REACTION TIME:
+# - Criterio adicional: exclusivamente respuestas correctas (Correct == 1)
+df_rt_clean <- df_accuracy_clean %>%
+  filter(Correct == 1)
+
+
+df_final= df_rt_clean%>%
+  transmute(subj= `Participant Private ID`,
+            RT= `Reaction Time`,
+            condition= `Spreadsheet: condition`,
+            Trial_type= `Spreadsheet: trial_type`,
+            Task= ifelse(`Task Name`== "UCL - tarea 1", "Task 1", "Task 2"),
+            trial_number= `Trial Number`,
+            item= `Spreadsheet: word_bottom_original`)
+
+```
+
+# Descriptives:
+
+
+```{r}
+df_final%>%
+  group_by(Task, Trial_type, condition)%>%
+  summarise(Mean_rt= mean(RT), sd= sd(RT))%>%
+  kable()
+
+```
+
+
+# Visualisation:
+
+
+```{r}
+df_final%>%
+  ggplot(aes(x= condition, y= RT, color= Trial_type))+
+  geom_violin()+
+  geom_boxplot(width = 0.2, position = position_dodge(.9))+
+  facet_wrap(~Task)
+```
+
+
+```{r}
+
+df_final$condition= as.factor(df_final$condition)
+df_final$condition= factor(df_final$condition, 
+                           levels = c("congruent_leet",
+                                      "incongruent_leet",
+                                      "baseline"))
+contrasts(df_final$condition)
+df_final$Task = as.factor(df_final$Task)
+contrasts(df_final$Task)
+
+df_final$log_RT= log(df_final$RT)
+
+same = subset(df_final, Trial_type=="same")
+different= subset(df_final, Trial_type=="different")
+
+
+Model_same= lmer(log_RT~ condition *  Task +trial_number+ (Task|subj), data = same)
+summary(Model_same)
+
+
+
+#different
+
+Model_different= lmer(log_RT~ condition *  Task +trial_number+ (Task|subj), data = different)
+summary(Model_different)
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 ```{r}
 # -------------------------------------------------------------------------
 # 1. CARGA DE LIBRERÍAS
@@ -44,28 +178,42 @@ cat("\n")
 # 4. TABLAS DESCRIPTIVAS SIN LIMPIEZA
 # -------------------------------------------------------------------------
 
-# A) Tabla descriptiva con psych (N, Media, SD, Mediana, IQR, Min, Max, Skew, Kurtosis)
-descriptivos_rt <- describeBy(df_respuestas$`Reaction Time`, 
-                              group = df_respuestas$Display, 
-                              mat = TRUE, 
-                              digits = 2)
-print(descriptivos_rt)
+df_respuestas%>%
+  group_by(`Task Name`, `Spreadsheet: condition`)%>%
+  summarise(Mean_rt= mean(`Reaction Time`), sd= sd(`Reaction Time`),
+            Mean_acc= mean(Correct),
+            SD_acc= sd(Correct))
 
-# B) Tabla resumen personalizada con dplyr
-tabla_resumen <- df_respuestas %>%
-  group_by(Display) %>%
-  summarise(
-    N_Total = n(),
-    Perdidos_RT = sum(is.na(`Reaction Time`)),
-    Media_RT = mean(`Reaction Time`, na.rm = TRUE),
-    Mediana_RT = median(`Reaction Time`, na.rm = TRUE),
-    DT_RT = sd(`Reaction Time`, na.rm = TRUE),
-    IQR_RT = IQR(`Reaction Time`, na.rm = TRUE),
-    Min_RT = min(`Reaction Time`, na.rm = TRUE),
-    Max_RT = max(`Reaction Time`, na.rm = TRUE),
-    Tasa_Aciertos_Pct = mean(Correct, na.rm = TRUE) * 100
-  )
-print(tabla_resumen)
+
+df_respuestas%>%
+  ggplot(aes(x= `Spreadsheet: condition`, y= `Reaction Time`, color= `Spreadsheet: condition`))+
+  geom_violin()+
+  geom_boxplot(width = 0.2)+
+  facet_wrap(~`Task Name`)
+
+
+# # A) Tabla descriptiva con psych (N, Media, SD, Mediana, IQR, Min, Max, Skew, Kurtosis)
+# descriptivos_rt <- describeBy(df_respuestas$`Reaction Time`, 
+#                               group = df_respuestas$Display, 
+#                               mat = TRUE, 
+#                               digits = 2)
+# print(descriptivos_rt)
+# 
+# # B) Tabla resumen personalizada con dplyr
+# tabla_resumen <- df_respuestas %>%
+#   group_by(Display) %>%
+#   summarise(
+#     N_Total = n(),
+#     Perdidos_RT = sum(is.na(`Reaction Time`)),
+#     Media_RT = mean(`Reaction Time`, na.rm = TRUE),
+#     Mediana_RT = median(`Reaction Time`, na.rm = TRUE),
+#     DT_RT = sd(`Reaction Time`, na.rm = TRUE),
+#     IQR_RT = IQR(`Reaction Time`, na.rm = TRUE),
+#     Min_RT = min(`Reaction Time`, na.rm = TRUE),
+#     Max_RT = max(`Reaction Time`, na.rm = TRUE),
+#     Tasa_Aciertos_Pct = mean(Correct, na.rm = TRUE) * 100
+#   )
+# print(tabla_resumen)
 
 # -------------------------------------------------------------------------
 # 5. GRÁFICOS EXPLORATORIOS (DATOS CRUDOS COMPLETOS)
@@ -133,31 +281,7 @@ df_respuestas %>%
 
 
 ```{r}
-# -------------------------------------------------------------------------
-# 1. CARGA DE LIBRERÍAS
-# -------------------------------------------------------------------------
-library(tidyverse)
-library(psych)
 
-# -------------------------------------------------------------------------
-# 2. CARGA DE DATOS Y EXCLUSIÓN DE PILOTOS (N = 70)
-# -------------------------------------------------------------------------
-df_raw <- read_csv("data_exp_287108-v3_tasks.zip")
-
-pilotos_reales <- c("skjj4nq6", "4deki73q", "q384vtnn", "nlduzyhx")
-
-datos_70_limpio <- df_raw %>%
-  filter(!is.na(`Participant Private ID`)) %>%
-  filter(!`Participant Public ID` %in% pilotos_reales)
-
-# -------------------------------------------------------------------------
-# 3. FILTRADO COGNITIVO: SOLO RESPUESTAS REALES EN TARGET Y TARGET2
-# -------------------------------------------------------------------------
-df_respuestas <- datos_70_limpio %>%
-  filter(Display %in% c("trial", "trial2")) %>%
-  filter(Screen %in% c("Target", "Target2")) %>%
-  filter(`Response Type` == "response" & `Component Name` == "Keyboard Response") %>%
-  mutate(Display = fct_drop(as.factor(Display)))
 
 # -------------------------------------------------------------------------
 # 4. LIMPIEZA DE DATOS (POR SUJETO)
@@ -167,7 +291,7 @@ df_respuestas <- datos_70_limpio %>%
 # - Recorte fijo (250 - 2000 ms)
 # - Filtro de ± 2.5 SD por sujeto sobre sus respuestas motoras
 df_accuracy_clean <- df_respuestas %>%
-  filter(!is.na(`Reaction Time`)) %>%
+  #filter(!is.na(`Reaction Time`)) %>%
   filter(`Reaction Time` >= 250 & `Reaction Time` <= 2000) %>%
   group_by(`Participant Private ID`) %>%
   mutate(
@@ -175,7 +299,7 @@ df_accuracy_clean <- df_respuestas %>%
     sd_suj = sd(`Reaction Time`, na.rm = TRUE),
     lim_inf = media_suj - 2.5 * sd_suj,
     lim_sup = media_suj + 2.5 * sd_suj,
-    es_outlier = `Reaction Time` < lim_inf | `Reaction Time` > lim_sup
+    es_outlier = `Reaction Time` <= lim_inf | `Reaction Time` >= lim_sup
   ) %>%
   filter(!es_outlier) %>%
   ungroup()
@@ -193,6 +317,12 @@ cat("=====================================================\n\n")
 # -------------------------------------------------------------------------
 # 5. TABLAS DESCRIPTIVAS POST-LIMPIEZA
 # -------------------------------------------------------------------------
+
+df_rt_clean%>%
+  group_by(`Task Name`, `Spreadsheet: condition`)%>%
+  summarise(Mean_rt= mean(`Reaction Time`), sd= sd(`Reaction Time`),
+            Mean_acc= mean(Correct),
+            SD_acc= sd(Correct))
 
 # A) Tabla descriptiva con psych para RT (Solo aciertos limpios)
 descriptivos_rt_clean <- describeBy(df_rt_clean$`Reaction Time`, 
