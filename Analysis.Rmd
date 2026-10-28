@@ -6,35 +6,53 @@ output: html_document
 ---
 
 ```{r}
-# 1. Cargar librerías necesarias
+# -------------------------------------------------------------------------
+# 1. CARGA DE LIBRERÍAS
+# -------------------------------------------------------------------------
 library(tidyverse)
-#install.packages("psych")
 library(psych)
 
-# 2. Cargar el dataset crudo
+# -------------------------------------------------------------------------
+# 2. CARGA DE DATOS Y EXCLUSIÓN DE PILOTOS (N = 70)
+# -------------------------------------------------------------------------
 df_raw <- read_csv("data_exp_287108-v3_tasks.zip")
 
-# 3. Filtrar únicamente los ensayos de interés (trial y trial2)
-# Esto descarta descansos, pantallas de inicio, pausas y pantallas finales
-df_trials <- df_raw %>%
-  filter(Display %in% c("trial", "trial2"))
+pilotos_reales <- c("skjj4nq6", "4deki73q", "q384vtnn", "nlduzyhx")
 
-# Verificación de conteo por ensayo tras el filtrado
-table(df_trials$Display, useNA = "ifany")
+datos_70_limpio <- df_raw %>%
+  filter(!is.na(`Participant Private ID`)) %>%
+  filter(!`Participant Public ID` %in% pilotos_reales)
+
+cat("Participantes únicos incluidos:", n_distinct(datos_70_limpio$`Participant Private ID`), "(Esperado: 70)\n\n")
 
 # -------------------------------------------------------------------------
-# TABLAS DESCRIPTIVAS SIN LIMPIEZA 
+# 3. AISLAMIENTO EXCLUSIVO DE RESPUESTAS A ESTÍMULOS TARGET
+# -------------------------------------------------------------------------
+# Se descartan fijaciones, pantallas en blanco y timeouts automáticos
+df_respuestas <- datos_70_limpio %>%
+  filter(Display %in% c("trial", "trial2")) %>%
+  filter(Screen %in% c("Target", "Target2")) %>%
+  filter(`Response Type` == "response" & `Component Name` == "Keyboard Response") %>%
+  mutate(Display = fct_drop(as.factor(Display)))
+
+# Verificación de conteo por condición
+cat("Conteo de respuestas cognitivas por condición:\n")
+print(table(df_respuestas$Display))
+cat("\n")
+
+# -------------------------------------------------------------------------
+# 4. TABLAS DESCRIPTIVAS SIN LIMPIEZA
 # -------------------------------------------------------------------------
 
-# 4. Tabla descriptiva con psych (N, Media, SD, Mediana, IQR, Min, Max, Skew, Kurtosis)
-descriptivos_rt <- describeBy(df_trials$`Reaction Time`, 
-                              group = df_trials$Display, 
+# A) Tabla descriptiva con psych (N, Media, SD, Mediana, IQR, Min, Max, Skew, Kurtosis)
+descriptivos_rt <- describeBy(df_respuestas$`Reaction Time`, 
+                              group = df_respuestas$Display, 
                               mat = TRUE, 
                               digits = 2)
 print(descriptivos_rt)
 
-# 5. Tabla resumen personalizada con dplyr
-tabla_resumen <- df_trials %>%
+# B) Tabla resumen personalizada con dplyr
+tabla_resumen <- df_respuestas %>%
   group_by(Display) %>%
   summarise(
     N_Total = n(),
@@ -50,23 +68,24 @@ tabla_resumen <- df_trials %>%
 print(tabla_resumen)
 
 # -------------------------------------------------------------------------
-# GRÁFICOS EXPLORATORIOS
+# 5. GRÁFICOS EXPLORATORIOS (DATOS CRUDOS COMPLETOS)
 # -------------------------------------------------------------------------
 
 # A) Histogramas separados por facetas (Trial vs Trial2)
-ggplot(df_trials %>% filter(!is.na(`Reaction Time`)), 
+ggplot(df_respuestas %>% filter(!is.na(`Reaction Time`)), 
        aes(x = `Reaction Time`, fill = Display)) +
   geom_histogram(binwidth = 50, color = "black", alpha = 0.7) + 
   facet_wrap(~ Display, scales = "free_y") +
   coord_cartesian(xlim = c(200, 2000)) + 
-  labs(title = "Distribución de Reaction Time por Ensayo (Zoom 200 - 2000 ms)",
+  labs(title = "Distribución de Reaction Time por Ensayo (Sin Limpieza)",
+       subtitle = "Visualización acotada a 200 - 2000 ms para inspección",
        x = "Reaction Time (ms)", 
        y = "Frecuencia") +
   theme_minimal() +
   theme(legend.position = "none")
 
 # B) Curva de densidad comparativa superpuesta
-ggplot(df_trials %>% filter(!is.na(`Reaction Time`)), 
+ggplot(df_respuestas %>% filter(!is.na(`Reaction Time`)), 
        aes(x = `Reaction Time`, color = Display, fill = Display)) +
   geom_density(alpha = 0.3) +
   coord_cartesian(xlim = c(0, 2000)) +
@@ -78,38 +97,51 @@ ggplot(df_trials %>% filter(!is.na(`Reaction Time`)),
   theme_minimal()
 
 # C) Diagrama de caja (Boxplot) para inspeccionar asimetría y dispersión
-ggplot(df_trials %>% filter(!is.na(`Reaction Time`)), 
+ggplot(df_respuestas %>% filter(!is.na(`Reaction Time`)), 
        aes(x = Display, y = `Reaction Time`, fill = Display)) +
-  geom_boxplot(alpha = 0.7, outlier.colour = "red", outlier.shape = 16) +
-  labs(title = "Boxplot de Reaction Time (Trial vs Trial2)",
-       x = "Ensayo", 
+  geom_boxplot(alpha = 0.7, 
+               outlier.colour = "red", 
+               outlier.shape = 16, 
+               outlier.size = 1, 
+               outlier.alpha = 0.3) +
+  coord_cartesian(ylim = c(0, 3000)) + 
+  labs(title = "Boxplot de Reaction Time (Trial vs Trial2) - Sin Limpieza",
+       subtitle = "Ajustado a 0 - 3000 ms para visualizar IQR y atípicos",
+       x = "ensayo", 
        y = "Reaction Time (ms)") +
   theme_minimal() +
   theme(legend.position = "none")
 
-# D) Proporción de Precisión (Aciertos vs. Errores)
-ggplot(df_trials %>% filter(!is.na(Correct)), 
-       aes(x = Display, fill = factor(Correct))) +
-  geom_bar(position = "fill") +
-  scale_y_continuous(labels = scales::percent) +
-  scale_fill_manual(values = c("0" = "#D95F02", "1" = "#1B9E77"), 
-                    labels = c("Error (0)", "Acierto (1)")) +
-  labs(title = "Proporción de Aciertos y Errores por Ensayo",
-       x = "Ensayo", 
-       y = "Porcentaje", 
-       fill = "Precisión") +
-  theme_minimal()
+# D) Precisión media (Accuracy) por Ensayo
+df_respuestas %>%
+  group_by(Display) %>%
+  summarise(Accuracy_pct = mean(Correct, na.rm = TRUE) * 100) %>%
+  ggplot(aes(x = Display, y = Accuracy_pct, fill = Display)) +
+  geom_col(width = 0.45, alpha = 0.85, color = "black") +
+  geom_text(aes(label = sprintf("%.2f%%", Accuracy_pct)), 
+            vjust = -0.5, size = 4.5, fontface = "bold") +
+  coord_cartesian(ylim = c(0, 105)) +
+  scale_y_continuous(breaks = seq(0, 100, by = 20), labels = function(x) paste0(x, "%")) +
+  labs(title = "Precisión Media (Accuracy) por Ensayo",
+       subtitle = "Todos los ensayos incluidos (N = 70 participantes)",
+       x = "ensayo", 
+       y = "Porcentaje de Aciertos (%)") +
+  theme_minimal() +
+  theme(legend.position = "none")
 ```
 
 
 
 ```{r}
-# 1. Cargar librerías necesarias
+# -------------------------------------------------------------------------
+# 1. CARGA DE LIBRERÍAS
+# -------------------------------------------------------------------------
 library(tidyverse)
-#install.packages("psych")
 library(psych)
 
-# 2. Cargar el dataset crudo y excluir pilotos
+# -------------------------------------------------------------------------
+# 2. CARGA DE DATOS Y EXCLUSIÓN DE PILOTOS (N = 70)
+# -------------------------------------------------------------------------
 df_raw <- read_csv("data_exp_287108-v3_tasks.zip")
 
 pilotos_reales <- c("skjj4nq6", "4deki73q", "q384vtnn", "nlduzyhx")
@@ -118,15 +150,23 @@ datos_70_limpio <- df_raw %>%
   filter(!is.na(`Participant Private ID`)) %>%
   filter(!`Participant Public ID` %in% pilotos_reales)
 
-# 3. Filtrar únicamente los ensayos de interés (trial y trial2)
-df_trials <- datos_70_limpio %>%
-  filter(Display %in% c("trial", "trial2"))
+# -------------------------------------------------------------------------
+# 3. FILTRADO COGNITIVO: SOLO RESPUESTAS REALES EN TARGET Y TARGET2
+# -------------------------------------------------------------------------
+df_respuestas <- datos_70_limpio %>%
+  filter(Display %in% c("trial", "trial2")) %>%
+  filter(Screen %in% c("Target", "Target2")) %>%
+  filter(`Response Type` == "response" & `Component Name` == "Keyboard Response") %>%
+  mutate(Display = fct_drop(as.factor(Display)))
 
 # -------------------------------------------------------------------------
-# LIMPIEZA DE DATOS (POR SUJETO)
+# 4. LIMPIEZA DE DATOS (POR SUJETO)
 # -------------------------------------------------------------------------
-# Filtro base temporal y detección de ±2.5 SD por sujeto (CONSERVANDO ACIERTOS Y ERRORES)
-df_accuracy_clean <- df_trials %>%
+# A) Dataset para ACCURACY:
+# - Conserva aciertos (1) y errores (0)
+# - Recorte fijo (250 - 2000 ms)
+# - Filtro de ± 2.5 SD por sujeto sobre sus respuestas motoras
+df_accuracy_clean <- df_respuestas %>%
   filter(!is.na(`Reaction Time`)) %>%
   filter(`Reaction Time` >= 250 & `Reaction Time` <= 2000) %>%
   group_by(`Participant Private ID`) %>%
@@ -140,25 +180,28 @@ df_accuracy_clean <- df_trials %>%
   filter(!es_outlier) %>%
   ungroup()
 
-# Dataset específico para RT: Filtro adicional de SOLO ACIERTOS
+# B) Dataset para REACTION TIME:
+# - Criterio adicional: exclusivamente respuestas correctas (Correct == 1)
 df_rt_clean <- df_accuracy_clean %>%
   filter(Correct == 1)
 
-cat("Ensayos retenidos para ACCURACY (aciertos + errores, sin outliers ni timeouts):", nrow(df_accuracy_clean), "\n")
-cat("Ensayos retenidos para REACTION TIME (solo aciertos, sin outliers ni timeouts):", nrow(df_rt_clean), "\n\n")
+cat("=====================================================\n")
+cat("Ensayos retenidos para ACCURACY (Aciertos + Errores):", nrow(df_accuracy_clean), "\n")
+cat("Ensayos retenidos para REACTION TIME (Solo Aciertos):", nrow(df_rt_clean), "\n")
+cat("=====================================================\n\n")
 
 # -------------------------------------------------------------------------
-# TABLAS DESCRIPTIVAS POST-LIMPIEZA
+# 5. TABLAS DESCRIPTIVAS POST-LIMPIEZA
 # -------------------------------------------------------------------------
 
-# 4. Tabla descriptiva con psych para RT (solo aciertos)
+# A) Tabla descriptiva con psych para RT (Solo aciertos limpios)
 descriptivos_rt_clean <- describeBy(df_rt_clean$`Reaction Time`, 
                                     group = df_rt_clean$Display, 
                                     mat = TRUE, 
                                     digits = 2)
 print(descriptivos_rt_clean)
 
-# 5. Tabla resumen RT con dplyr (con Error Típico e IC 95% para error bars)
+# B) Tabla resumen personalizada de RT con dplyr (Medias y Error Bars)
 tabla_resumen_rt <- df_rt_clean %>%
   group_by(Display) %>%
   summarise(
@@ -175,7 +218,7 @@ tabla_resumen_rt <- df_rt_clean %>%
   )
 print(tabla_resumen_rt)
 
-# 6. Tabla resumen ACCURACY con dplyr (con Error Típico e IC 95% para error bars)
+# C) Tabla resumen de ACCURACY con dplyr (Medias y Error Bars)
 tabla_resumen_acc <- df_accuracy_clean %>%
   group_by(Display) %>%
   summarise(
@@ -183,7 +226,6 @@ tabla_resumen_acc <- df_accuracy_clean %>%
     N_Aciertos = sum(Correct == 1, na.rm = TRUE),
     N_Errores = sum(Correct == 0, na.rm = TRUE),
     Accuracy_Pct = mean(Correct, na.rm = TRUE) * 100,
-    # Error estándar de una proporción: sqrt(p * (1 - p) / N) * 100
     SE_Acc = sqrt((mean(Correct) * (1 - mean(Correct))) / n()) * 100,
     IC95_inf_Acc = Accuracy_Pct - 1.96 * SE_Acc,
     IC95_sup_Acc = Accuracy_Pct + 1.96 * SE_Acc
@@ -191,10 +233,10 @@ tabla_resumen_acc <- df_accuracy_clean %>%
 print(tabla_resumen_acc)
 
 # -------------------------------------------------------------------------
-# GRÁFICOS EXPLORATORIOS POST-LIMPIEZA (CON ERROR BARS)
+# 6. GRÁFICOS EXPLORATORIOS POST-LIMPIEZA (CON ERROR BARS)
 # -------------------------------------------------------------------------
 
-# A.2) Gráfico de barras de RT Medio con Error Bars (± 1 SE)
+# A) Gráfico de barras de RT Medio con Error Bars (± 1 SE)
 ggplot(tabla_resumen_rt, aes(x = Display, y = Media_RT, fill = Display)) +
   geom_col(width = 0.45, alpha = 0.85, color = "black") +
   geom_errorbar(aes(ymin = Media_RT - SE_RT, ymax = Media_RT + SE_RT), 
@@ -202,13 +244,13 @@ ggplot(tabla_resumen_rt, aes(x = Display, y = Media_RT, fill = Display)) +
   geom_text(aes(label = sprintf("%.2f ms", Media_RT)), 
             vjust = 3.5, color = "white", fontface = "bold", size = 4.5) +
   labs(title = "Reaction Time Medio por Ensayo (Solo Aciertos)",
-       subtitle = "Limpieza ±2.5 SD y 250-2000 ms por sujeto. Barras: ± 1 SE",
+       subtitle = "Filtrado: Target/Target2, 250-2000 ms y ±2.5 SD por sujeto. Barras: ± 1 SE",
        x = "written formats", 
        y = "Reaction Time Medio (ms)") +
   theme_minimal() +
   theme(legend.position = "none")
 
-# A) Histogramas separados por facetas (Trial vs Trial2) - LIMPIO
+# B) Histogramas separados por facetas (Trial vs Trial2) - LIMPIO
 ggplot(df_rt_clean, aes(x = `Reaction Time`, fill = Display)) +
   geom_histogram(binwidth = 50, 
                  boundary = 250, 
@@ -223,7 +265,7 @@ ggplot(df_rt_clean, aes(x = `Reaction Time`, fill = Display)) +
   theme_minimal() +
   theme(legend.position = "none")
 
-# B) Gráfico de puntos con Intervalos de Confianza (95% CI) para RT
+# C) Gráfico de puntos con Intervalos de Confianza (95% CI) para RT
 ggplot(tabla_resumen_rt, aes(x = Display, y = Media_RT, group = 1)) +
   geom_line(color = "gray50", linewidth = 0.7) +
   geom_point(aes(color = Display), size = 4) +
@@ -235,7 +277,7 @@ ggplot(tabla_resumen_rt, aes(x = Display, y = Media_RT, group = 1)) +
        color = "written formats") +
   theme_minimal()
 
-# C) Diagrama de caja (Boxplot) para inspeccionar asimetría y dispersión - DATOS LIMPIOS
+# D) Boxplot de Reaction Time - DATOS LIMPIOS
 ggplot(df_rt_clean, aes(x = Display, y = `Reaction Time`, fill = Display)) +
   geom_boxplot(alpha = 0.7, 
                outlier.colour = "red", 
@@ -246,12 +288,12 @@ ggplot(df_rt_clean, aes(x = Display, y = `Reaction Time`, fill = Display)) +
   scale_y_continuous(breaks = seq(250, 2000, by = 250)) +
   labs(title = "Boxplot de Reaction Time Depurados (Trial vs Trial2)",
        subtitle = "Solo aciertos, 250 - 2000 ms y filtrado ±2.5 SD por sujeto",
-       x = "ensayo", 
+       x = "written formats", 
        y = "Reaction Time (ms)") +
   theme_minimal() +
   theme(legend.position = "none")
 
-# C.2) Gráfico de barras de ACCURACY con Error Bars (± 1 SE) y etiquetas
+# E) Gráfico de barras de ACCURACY con Error Bars (± 1 SE)
 ggplot(tabla_resumen_acc, aes(x = Display, y = Accuracy_Pct, fill = Display)) +
   geom_col(width = 0.45, alpha = 0.85, color = "black") +
   geom_errorbar(aes(ymin = Accuracy_Pct - SE_Acc, ymax = Accuracy_Pct + SE_Acc), 
@@ -267,7 +309,7 @@ ggplot(tabla_resumen_acc, aes(x = Display, y = Accuracy_Pct, fill = Display)) +
   theme_minimal() +
   theme(legend.position = "none")
 
-# D) Curva de densidad de RT depurado (solo aciertos)
+# F) Curva de densidad de RT depurado (Solo aciertos)
 ggplot(df_rt_clean, aes(x = `Reaction Time`, color = Display, fill = Display)) +
   geom_density(alpha = 0.3) +
   coord_cartesian(xlim = c(200, 2000)) +
@@ -283,9 +325,75 @@ ggplot(df_rt_clean, aes(x = `Reaction Time`, color = Display, fill = Display)) +
 
 
 ```{r}
+# -------------------------------------------------------------------------
+# BALANCE DETALLADO DE LIMPIEZA Y PÉRDIDA DE ENSAYOS
+# -------------------------------------------------------------------------
 
+# 1. Totales iniciales de respuestas a estímulos (N = 70)
+total_respuestas_iniciales <- nrow(df_respuestas)
 
+# 2. Desglose secuencial de descartes para ACCURACY
+# Paso 2.1: Fuera del rango cognitivo 250 - 2000 ms (o NAs)
+descartes_rango_fijo <- sum(
+  is.na(df_respuestas$`Reaction Time`) | 
+  df_respuestas$`Reaction Time` < 250 | 
+  df_respuestas$`Reaction Time` > 2000
+)
 
+# Paso 2.2: Atípicos relativos (± 2.5 SD por sujeto sobre las respuestas válidas)
+# Calculamos la diferencia entre los que entraron al rango fijo y los retenidos en df_accuracy_clean
+total_en_rango <- total_respuestas_iniciales - descartes_rango_fijo
+descartes_sd25 <- total_en_rango - nrow(df_accuracy_clean)
+
+# Total descartes para la base de ACCURACY
+total_eliminados_acc <- total_respuestas_iniciales - nrow(df_accuracy_clean)
+pct_eliminados_acc <- (total_eliminados_acc / total_respuestas_iniciales) * 100
+
+# 3. Desglose adicional para REACTION TIME (los errores)
+errores_excluidos_rt <- sum(df_accuracy_clean$Correct == 0, na.rm = TRUE)
+total_eliminados_rt <- total_respuestas_iniciales - nrow(df_rt_clean)
+pct_eliminados_rt <- (total_eliminados_rt / total_respuestas_iniciales) * 100
+
+# -------------------------------------------------------------------------
+# SALIDA POR CONSOLA (INFORME GENERAL)
+# -------------------------------------------------------------------------
+cat("=====================================================================\n")
+cat("          BALANCE GLOBAL DE LIMPIEZA (ESTÍMULOS TARGET, N = 70)       \n")
+cat("=====================================================================\n")
+cat("Total de respuestas motoras iniciales registradas:", total_respuestas_iniciales, "\n\n")
+
+cat("--- ETAPA 1: FILTRADO PARA ACCURACY (Conserva Aciertos y Errores) ---\n")
+cat("  1. Descartados por rango fijo (< 250 ms o > 2000 ms):", descartes_rango_fijo, "\n")
+cat("  2. Descartados por ± 2.5 SD (por sujeto):            ", descartes_sd25, "\n")
+cat("  -> Total ensayos eliminados para Accuracy:          ", total_eliminados_acc, 
+    sprintf("(%.2f%%)\n", pct_eliminados_acc))
+cat("  -> Total ensayos RETENIDOS en Accuracy:             ", nrow(df_accuracy_clean), 
+    sprintf("(%.2f%%)\n\n", 100 - pct_eliminados_acc))
+
+cat("--- ETAPA 2: FILTRADO PARA REACTION TIME (Solo Aciertos Limpios) ----\n")
+cat("  3. Respuestas incorrectas excluidas (Correct == 0):   ", errores_excluidos_rt, "\n")
+cat("  -> Total ensayos eliminados acumulados para RT:     ", total_eliminados_rt, 
+    sprintf("(%.2f%%)\n", pct_eliminados_rt))
+cat("  -> Total ensayos RETENIDOS en RT:                   ", nrow(df_rt_clean), 
+    sprintf("(%.2f%%)\n", 100 - pct_eliminados_rt))
+cat("=====================================================================\n\n")
+
+# -------------------------------------------------------------------------
+# TABLA RESUMEN POR CONDICIÓN EXPERIMENTAL (written formats)
+# -------------------------------------------------------------------------
+balance_por_tarea <- df_respuestas %>%
+  group_by(Display) %>%
+  summarise(
+    Total_Inicial = n(),
+    Anticipaciones_menores_250ms = sum(`Reaction Time` < 250, na.rm = TRUE),
+    Lentos_mayores_2000ms = sum(`Reaction Time` > 2000, na.rm = TRUE),
+    Retenidos_Accuracy = sum(df_accuracy_clean$Display == first(Display)),
+    Errores_en_Accuracy = sum(df_accuracy_clean$Display == first(Display) & df_accuracy_clean$Correct == 0),
+    Retenidos_RT_Aciertos = sum(df_rt_clean$Display == first(Display)),
+    Pct_Retencion_RT = round((Retenidos_RT_Aciertos / Total_Inicial) * 100, 2)
+  )
+
+print(balance_por_tarea)
 ```
 
 ```{r}
