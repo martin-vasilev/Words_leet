@@ -60,7 +60,9 @@ df_final= df_rt_clean%>%
             Trial_type= `Spreadsheet: trial_type`,
             Task= ifelse(`Task Name`== "UCL - tarea 1", "Task 1", "Task 2"),
             trial_number= `Trial Number`,
-            item= `Spreadsheet: word_bottom_original`)
+            item= `Spreadsheet: word_bottom_original`,
+            randomiser = `randomiser-rkry`
+            )
 
 ```
 
@@ -95,6 +97,8 @@ df_final$condition= factor(df_final$condition,
                            levels = c("congruent_leet",
                                       "incongruent_leet",
                                       "baseline"))
+df_final$randomiser <- as.factor(df_final$randomiser)
+
 contrasts(df_final$condition)
 df_final$Task = as.factor(df_final$Task)
 contrasts(df_final$Task)
@@ -116,8 +120,103 @@ Model_different= lmer(log_RT~ condition *  Task +trial_number+ (Task|subj), data
 summary(Model_different)
 
 
+#Añadir a same y different la columna: randomiser.rkry
+
+Model_same_randomiser= lmer(log_RT~ condition *  Task * randomiser +trial_number+ (Task|subj), data = same)
+summary(Model_same_randomiser)
+
+Model_different_randomiser= lmer(log_RT~ condition *  Task * randomiser +trial_number+ (Task|subj), data = different)
+summary(Model_same)
+
+
 ```
 
+
+```{r}
+library(ggeffects)
+
+# 1. Calcular las predicciones para la interacción condition * Task y Randomiser
+
+#--> Same
+
+efectos_same <- predict_response(Model_same, terms = c("condition", "Task"))
+efectos_same_randomiser <- predict_response(Model_same_randomiser, terms = c("condition", "Task", "randomiser"))
+
+efectos_same%>%
+  ggplot(aes(x= x, y= predicted, group = group, colour = group, ymin= conf.low, ymax= conf.high))+
+  geom_point()+
+  geom_line()+
+  geom_errorbar(width= 0.2)+
+  labs(x= "Condition", y= "Model predicted RT (log)", colour= "Task")+
+  theme_minimal(18)
+
+#plot(efectos_same)
+
+efectos_same_randomiser %>%
+  ggplot(aes(x = x, y = predicted, group = group, colour = group, ymin = conf.low, ymax = conf.high)) +
+  geom_point(position = position_dodge(0.2), size = 2) +
+  geom_line(position = position_dodge(0.2)) +
+  geom_errorbar(width = 0.2, position = position_dodge(0.2)) +
+  facet_wrap(~facet) +
+  labs(
+    x = "Condition", 
+    y = "Model predicted RT (log)", 
+    colour = "Task"
+  ) +
+  theme_minimal(18)+
+theme(
+    axis.text.x = element_text(size = 8)
+  )
+
+
+#--> Different
+
+efectos_different <- predict_response(Model_different, terms = c("condition", "Task"))
+efectos_different_randomiser <- predict_response(Model_different_randomiser, terms = c("condition", "Task", "randomiser"))
+#plot(efectos_different)
+
+efectos_different%>%
+  ggplot(aes(x= x, y= predicted, group = group, colour = group, ymin= conf.low, ymax= conf.high))+
+  geom_point()+
+  geom_line()+
+  geom_errorbar(width= 0.2)+
+  labs(x= "Condition", y= "Model predicted RT (log)", colour= "Task")+
+  theme_minimal(18)
+
+efectos_different_randomiser %>%
+  ggplot(aes(x = x, y = predicted, group = group, colour = group, ymin = conf.low, ymax = conf.high)) +
+  geom_point(position = position_dodge(0.2), size = 2) +
+  geom_line(position = position_dodge(0.2)) +
+  geom_errorbar(width = 0.2, position = position_dodge(0.2)) +
+  facet_wrap(~facet) +
+  labs(
+    x = "Condition", 
+    y = "Model predicted RT (log)", 
+    colour = "Task"
+  ) +
+  theme_minimal(18) +
+theme(
+    axis.text.x = element_text(size = 8)
+  )
+
+
+library(emmeans)
+
+post_hoc_same<- emmeans(Model_same, ~ condition|Task) #por qué decideponer condition y la barra, dónde meto yo el randomiser?
+pairs(post_hoc_same, adj= "bonferroni")
+
+
+library(emmeans)
+
+post_hoc_same_randomiser <- emmeans(Model_same_randomiser, ~ condition | Task * randomiser)
+pairs(post_hoc_same_randomiser, adjust = "bonferroni")
+
+
+library(sjPlot)
+tab_model(Model_same, Model_different, show.se = T, show.stat = T)
+tab_model(Model_same, Model_same_randomiser, Model_different, Model_different_randomiser, show.se = T, show.stat = T)
+
+```
 
 
 
